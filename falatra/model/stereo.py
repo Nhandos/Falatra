@@ -37,7 +37,7 @@ def importCalibrationPoints(calibfile):
 
 class CameraModel(object):
 
-    def __init__(self, image_size): 
+    def __init__(self, image_size=None): 
         self.image_size       = image_size
         self.distortion       = None
         self.intrinsic        = None
@@ -80,8 +80,8 @@ class CameraModel(object):
         """ Import parameters from dictionary """
  
         self.image_size, self.intrinsic, self.distortion = \
-                map(lambda X: np.array(x, np.float64), valuedict.values())
-        self.image_size = tuple(map(int, self.img_size.tolist()))
+                map(lambda x: np.array(x, np.float64), valuedict.values())
+        self.image_size = tuple(map(int, self.image_size.tolist()))
 
 
 class StereoCameraModel(object):
@@ -90,7 +90,7 @@ class StereoCameraModel(object):
     STEREO_FLAGS = 0
     STEREO_FLAGS |= cv2.CALIB_FIX_INTRINSIC  
 
-    def __init__(self, image_size):
+    def __init__(self, image_size=None):
 
         self.image_size = image_size
 
@@ -174,8 +174,9 @@ class StereoCameraModel(object):
     def exportToDict(self):
 
         return {
-            'camera1': self.camera1.exportAsDict(),
-            'camera2': self.camera2.exportAsDict(),
+            'imagesize': self.image_size,
+            'camera1': self.camera1.exportToDict(),
+            'camera2': self.camera2.exportToDict(),
             'R': self.R.tolist(),
             'T': self.T.tolist(),
             'E': self.E.tolist(),
@@ -184,17 +185,18 @@ class StereoCameraModel(object):
 
     def loadFromDict(self, valuedict):
 
+        self.image_size = tuple(map(int, valuedict['imagesize']))
         self.camera1.loadFromDict(valuedict['camera1'])
         self.camera2.loadFromDict(valuedict['camera2'])
         self.R, self.T, self.E, self.F = \
-            map(lambda X: np.array(x, np.float64), valuedict.values()[2:])
+            map(lambda x: np.array(x, np.float64), list(valuedict.values())[3:])
 
 
 class StereoCalibrator(object):
 
     POINTS_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
 
-    def __init__(self, image_size):
+    def __init__(self, image_size=None):
         
         self.image_size  = image_size 
         self.stereomodel = StereoCameraModel(image_size)
@@ -204,7 +206,6 @@ class StereoCalibrator(object):
 
     def __str__(self):
         str_ = ""
-        str_ += "-------- Stereo Model ----------\n"
         str_ += self.stereomodel.__str__()
 
         return str_
@@ -254,6 +255,8 @@ class StereoCalibrator(object):
         else:
             print('FAILED!')
 
+        return ret
+
     def drawChessBoardCorners(self,index, chessboard_size=(7,9)):
         img1 = self.images[0][index]
         img2 = self.images[1][index]
@@ -268,10 +271,10 @@ class StereoCalibrator(object):
         print("Saving calibration parameters...", end=' ')
         folder, name = os.path.split(path)
         if os.path.isdir(folder):
-             
-
+            with open(path, 'w+') as fp:
+                json.dump(self.stereomodel.exportToDict(), fp)
+            print('Ok.')
         else:
             print("Failed! Directory does not exists")
-
          
 

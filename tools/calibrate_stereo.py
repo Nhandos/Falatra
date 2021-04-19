@@ -51,17 +51,16 @@ def _main(args):
 
         if args.load:
             calibratorfile = os.path.join(args.load, calibratorfiles[i])
-            print(i, file1, file2, calibratorfile)
             world_pts, img_pts1, img_pts2 = importCalibrationPoints(calibratorfile)
             calibrator.addCalibrationPoints(img1, img2, world_pts, img_pts1, img_pts2)
         else:
             calibrator.findCalibrationPoints(img1, img2)
 
+
     ret = calibrator.calibrate()
     if ret:
+        print(calibrator)
         calibrator.save(args.output)
-        
-    
 
 
 if __name__ == '__main__':
