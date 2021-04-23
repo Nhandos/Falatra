@@ -88,7 +88,7 @@ class StereoCameraModel(object):
 
     STEREO_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5)
     STEREO_FLAGS = 0
-    STEREO_FLAGS |= cv2.CALIB_FIX_INTRINSIC  
+    #STEREO_FLAGS |= cv2.CALIB_FIX_INTRINSIC  
 
     def __init__(self, image_size=None):
 
@@ -103,6 +103,14 @@ class StereoCameraModel(object):
         self.T        = None   # Translation vector from camera_1 to camera_2
         self.F        = None   # Fundamental matrix
         self.E        = None   # Essential Matrix
+
+        # Stereo Rectification parameters
+        self.rect_trans        = [None, None]  # Rectify transform
+        self.proj_mats         = [None, None]  # Projection matrix
+        self.disp_to_depth_map = None
+        self.valid_boxes       = [None, None]
+        self.undistort_map     = [None, None]
+        self.rectification_map = [None, None]
 
     def __str__(self):
         
@@ -166,11 +174,53 @@ class StereoCameraModel(object):
             self.camera2.intrinsic = cam2_intrinsic
             self.camera2.distortion = cam2_distortion
 
+
         else:
             return False
 
         return True
 
+    def initUndistortRectifyMap(self):
+
+        (self.rect_trans[0], self.rect_trans[1],
+        self.proj_mats[0], self.proj_mats[1],
+        self.disp_to_depth_mat, self.valid_boxes[0],
+        self.valid_boxes[1]) = cv2.stereoRectify(
+            self.camera1.intrinsic,
+            self.camera1.distortion,
+            self.camera2.intrinsic,
+            self.camera2.distortion,
+            self.image_size,
+            self.R,
+            self.T,
+            flags=0)
+
+        for i in range(2):
+            camera = self.camera1 if i == 0 else self.camera2
+            (self.undistort_map[i],
+                self.rectification_map[i]) = cv2.initUndistortRectifyMap(
+                    camera.intrinsic,
+                    camera.distortion,
+                    self.rect_trans[i],
+                    self.proj_mats[i],
+                    self.image_size,
+                    cv2.CV_32FC1)
+
+        print(self.rect_trans, self.proj_mats)
+
+    def rectify(self, frame1, frame2):
+
+        new_frames = []
+        for i, frame in enumerate((frame1, frame2)):
+            new_frames.append(cv2.remap(frame,
+                self.undistort_map[i],
+                self.rectification_map[i],
+                cv2.INTER_NEAREST))
+
+        return new_frames
+        
+
+                
     def exportToDict(self):
 
         return {
