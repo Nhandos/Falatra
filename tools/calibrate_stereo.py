@@ -4,13 +4,14 @@ import argparse
 import logging
 import sys
 import os
+import json
 
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from falatra.model.stereo import StereoCalibrator, importCalibrationPoints
+from falatra.model.stereo import StereoCalibrator
 
 parser = argparse.ArgumentParser() 
 parser.add_argument('folder1', type=str, 
@@ -21,12 +22,35 @@ parser.add_argument('output', type=str,
     help='directory to save calibration data')
 parser.add_argument('--load', type=str, default=None,
     help='object points and image points from file')
+parser.add_argument('--show', default=False, action='store_true',
+    help='Show calibration corners')
 
 
 def get_imagesize(imagefile):
 
     img = cv2.imread(imagefile)
     return img.shape[:2]
+
+
+def importCalibrationPoints(calibfile):
+
+    world_pts = []
+    img_pts1 = []
+    img_pts2 = []
+
+    with open(calibfile, "r") as f:
+        data = json.load(f)
+        for row in data:
+            world_pts.append(row['obj_pts'])
+            img_pts1.append(row['img_pts1'])
+            img_pts2.append(row['img_pts2'])
+
+    world_pts = np.array(world_pts).astype(np.float32)
+    world_pts = np.insert(world_pts, 2, 0, axis=1)
+            
+    return np.array(world_pts).astype(np.float32), \
+           np.array(img_pts1).astype(np.float32), \
+           np.array(img_pts2).astype(np.float32)
 
 
 def _main(args):
@@ -37,8 +61,7 @@ def _main(args):
     files2.sort()
 
     image_size = get_imagesize(os.path.join(args.folder1, files1[0]))
-    calibrator = StereoCalibrator(image_size)
-
+    calibrator = StereoCalibrator(6, 8, 25, image_size)
     if args.load:
         calibratorfiles = os.listdir(args.load)
         calibratorfiles.sort()
@@ -52,15 +75,16 @@ def _main(args):
         if args.load:
             calibratorfile = os.path.join(args.load, calibratorfiles[i])
             world_pts, img_pts1, img_pts2 = importCalibrationPoints(calibratorfile)
-            calibrator.addCalibrationPoints(img1, img2, world_pts, img_pts1, img_pts2)
+            corners = (img_pts1, img_pts2)
         else:
-            calibrator.findCalibrationPoints(img1, img2)
+            corners = None
 
+        calibrator.add_corners((img1, img2), corners, show_results=args.show)
 
-    ret = calibrator.calibrate()
-    if ret:
-        print(calibrator)
-        calibrator.save(args.output)
+    calib = calibrator.calibrate_cameras()
+    print(calibrator.check_calibration(calib))
+    print(calib)
+    calib.export(args.output)
 
 
 if __name__ == '__main__':

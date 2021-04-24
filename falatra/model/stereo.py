@@ -1,330 +1,313 @@
-import argparse 
-import os
-import json
+# Copyright (C) 2014 Daniel Lee <lee.daniel.1986@gmail.com>
+#
+# This file is part of StereoVision.
+#
+# StereoVision is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# StereoVision is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with StereoVision.  If not, see <http://www.gnu.org/licenses/>.
 
-from tqdm import tqdm
-import numpy as np
+"""
+Classes for calibrating homemade stereo cameras.
+
+Classes:
+
+    * ``StereoCalibration`` - Calibration for stereo camera
+    * ``StereoCalibrator`` - Class to calibrate stereo camera with
+
+.. image:: classes_calibration.svg
+"""
+
+import os
+
 import cv2
 from matplotlib import pyplot as plt
+import numpy as np
 
-parser = argparse.ArgumentParser() 
-parser.add_argument('folder1', type=str) 
-parser.add_argument('folder2', type=str)
-parser.add_argument('imagesize', type=int, nargs=2)
-parser.add_argument('--load', type=str, default=None)
+ChessboardNotFoundError = Exception("Chessboard not found")
 
+class StereoCalibration(object):
 
-def importCalibrationPoints(calibfile):
+    """
+    A stereo camera calibration.
 
-    world_pts = []
-    img_pts1 = []
-    img_pts2 = []
-
-    with open(calibfile, "r") as f:
-        data = json.load(f)
-        for row in data:
-            world_pts.append(row['obj_pts'])
-            img_pts1.append(row['img_pts1'])
-            img_pts2.append(row['img_pts2'])
-
-    world_pts = np.array(world_pts).astype(np.float32)
-    world_pts = np.insert(world_pts, 2, 0, axis=1)
-            
-    return np.array(world_pts).astype(np.float32), \
-           np.array(img_pts1).astype(np.float32), \
-           np.array(img_pts2).astype(np.float32)
-
-
-class CameraModel(object):
-
-    def __init__(self, image_size=None): 
-        self.image_size       = image_size
-        self.distortion       = None
-        self.intrinsic        = None
+    The ``StereoCalibration`` stores the calibration for a stereo pair. It can
+    also rectify pictures taken from its stereo pair.
+    """
 
     def __str__(self):
-        separator = "=" * 70
-        str_ = '\n'.join([separator,
-                          "<Image Size>",
-                          str(self.image_size),
-                          "\n<Intrinsics>",            
-                          str(self.intrinsic),
-                          "\n<Distortion Coefficients>",
-                          str(self.distortion),
-                          separator])
+        output = ""
+        for key, item in self.__dict__.items():
+            output += key + ":\n"
+            output += str(item) + "\n"
+        return output
 
-        return str_
+    def _copy_calibration(self, calibration):
+        """Copy another ``StereoCalibration`` object's values."""
+        for key, item in calibration.__dict__.items():
+            self.__dict__[key] = item
 
-    def calibrate(self, obj_pts, img_pts):
-        ret, intrinsic, distortion, _, _ = cv2.calibrateCamera(
-                obj_pts,
-                img_pts,
-                self.image_size,
-                None, None)
+    def _interact_with_folder(self, output_folder, action):
+        """
+        Export/import matrices as *.npy files to/from an output folder.
 
-        if ret:
-            self.intrinsic  = intrinsic
-            self.distortion = distortion
+        ``action`` is a string. It determines whether the method reads or writes
+        to disk. It must have one of the following values: ('r', 'w').
+        """
+        if not action in ('r', 'w'):
+            raise ValueError("action must be either 'r' or 'w'.")
+        for key, item in self.__dict__.items():
+            if isinstance(item, dict):
+                for side in ("left", "right"):
+                    filename = os.path.join(output_folder,
+                                            "{}_{}.npy".format(key, side))
+                    if action == 'w':
+                        np.save(filename, self.__dict__[key][side])
+                    else:
+                        self.__dict__[key][side] = np.load(filename)
+            else:
+                filename = os.path.join(output_folder, "{}.npy".format(key))
+                if action == 'w':
+                    np.save(filename, self.__dict__[key])
+                else:
+                    self.__dict__[key] = np.load(filename)
 
-        return ret
+    def __init__(self, calibration=None, input_folder=None):
+        """
+        Initialize camera calibration.
 
-    def exportToDict(self):
-        """ Export parameters as a Dictionary """
-        return {
-            'imagesize': self.image_size,
-            'intrinsic': self.intrinsic.tolist(),
-            'distortion': self.distortion.tolist()
-        }
+        If another calibration object is provided, copy its values. If an input
+        folder is provided, load ``*.npy`` files from that folder. An input
+        folder overwrites a calibration object.
+        """
+        #: Camera matrices (M)
+        self.cam_mats = {"left": None, "right": None}
+        #: Distortion coefficients (D)
+        self.dist_coefs = {"left": None, "right": None}
+        #: Rotation matrix (R)
+        self.rot_mat = None
+        #: Translation vector (T)
+        self.trans_vec = None
+        #: Essential matrix (E)
+        self.e_mat = None
+        #: Fundamental matrix (F)
+        self.f_mat = None
+        #: Rectification transforms (3x3 rectification matrix R1 / R2)
+        self.rect_trans = {"left": None, "right": None}
+        #: Projection matrices (3x4 projection matrix P1 / P2)
+        self.proj_mats = {"left": None, "right": None}
+        #: Disparity to depth mapping matrix (4x4 matrix, Q)
+        self.disp_to_depth_mat = None
+        #: Bounding boxes of valid pixels
+        self.valid_boxes = {"left": None, "right": None}
+        #: Undistortion maps for remapping
+        self.undistortion_map = {"left": None, "right": None}
+        #: Rectification maps for remapping
+        self.rectification_map = {"left": None, "right": None}
+        if calibration:
+            self._copy_calibration(calibration)
+        elif input_folder:
+            self.load(input_folder)
 
-    def loadFromDict(self, valuedict):
-        """ Import parameters from dictionary """
- 
-        self.image_size, self.intrinsic, self.distortion = \
-                map(lambda x: np.array(x, np.float64), valuedict.values())
-        self.image_size = tuple(map(int, self.image_size.tolist()))
+    def load(self, input_folder):
+        """Load values from ``*.npy`` files in ``input_folder``."""
+        self._interact_with_folder(input_folder, 'r')
 
+    def export(self, output_folder):
+        """Export matrices as ``*.npy`` files to an output folder."""
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        self._interact_with_folder(output_folder, 'w')
 
-class StereoCameraModel(object):
+    def rectify(self, frames):
+        """
+        Rectify frames passed as (left, right) pair of OpenCV Mats.
 
-    STEREO_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-5)
-    STEREO_FLAGS = 0
-    #STEREO_FLAGS |= cv2.CALIB_FIX_INTRINSIC  
-
-    def __init__(self, image_size=None):
-
-        self.image_size = image_size
-
-        # Camera model
-        self.camera1 = CameraModel(image_size)
-        self.camera2 = CameraModel(image_size)
-
-        # Stereo parameters
-        self.R        = None   # Rotation matrix from camera_1 to camera_2
-        self.T        = None   # Translation vector from camera_1 to camera_2
-        self.F        = None   # Fundamental matrix
-        self.E        = None   # Essential Matrix
-
-        # Stereo Rectification parameters
-        self.rect_trans        = [None, None]  # Rectify transform
-        self.proj_mats         = [None, None]  # Projection matrix
-        self.disp_to_depth_map = None
-        self.valid_boxes       = [None, None]
-        self.undistort_map     = [None, None]
-        self.rectification_map = [None, None]
-
-    def __str__(self):
-        
-        separator = "=" * 70
-        str_ = '\n'.join([separator,
-                          "<Dimension>",
-                          str(self.image_size),
-                          "\n<Camera1 Intrinsic>",            
-                          str(self.camera1.intrinsic),
-                          "\n<Camera1 Distortion Coefficients>",
-                          str(self.camera1.distortion),
-                          "\n<Camera2 Intrinsic>",
-                          str(self.camera2.intrinsic),
-                          "\n<Camera2 Distortion Coefficients>",
-                          str(self.camera2.distortion),
-                          "\n<Rotation Matrix>",
-                          str(self.R),
-                          "\n<Translation Vector>",
-                          str(self.T),
-                          "\n<Essential Matrix>",
-                          str(self.E),
-                          "\n<Fundamental Matrix>",
-                          str(self.F),
-                          separator,
-                          ])
-        return str_
-
-    def calibrate(self, obj_pts, cam1_pts, cam2_pts):
-
-        ret = self.camera1.calibrate(obj_pts, cam1_pts)  # Camera1 calibration
-
-        if not ret:
-            return False
-
-        ret = self.camera2.calibrate(obj_pts, cam2_pts)  # Camera2 calibration
-
-        if not ret:
-            return False
-
-        ret, cam1_intrinsic, cam1_distortion, cam2_intrinsic, cam2_distortion, \
-                R, T, E, F = cv2.stereoCalibrate(
-                    obj_pts,
-                    cam1_pts,
-                    cam2_pts,
-                    self.camera1.intrinsic,
-                    self.camera1.distortion,
-                    self.camera2.intrinsic,
-                    self.camera2.distortion,
-                    self.image_size,
-                    self.R,
-                    self.T,
-                    self.E,
-                    self.F,
-                    criteria=self.STEREO_CRITERIA,
-                    flags=self.STEREO_FLAGS)
-
-        if ret:
-            self.R, self.T, self.E, self.F = R, T, E, F
-            self.camera1.intrinsic = cam1_intrinsic
-            self.camera1.distortion = cam1_distortion
-            self.camera2.intrinsic = cam2_intrinsic
-            self.camera2.distortion = cam2_distortion
-
-
-        else:
-            return False
-
-        return True
-
-    def initUndistortRectifyMap(self):
-
-        (self.rect_trans[0], self.rect_trans[1],
-        self.proj_mats[0], self.proj_mats[1],
-        self.disp_to_depth_mat, self.valid_boxes[0],
-        self.valid_boxes[1]) = cv2.stereoRectify(
-            self.camera1.intrinsic,
-            self.camera1.distortion,
-            self.camera2.intrinsic,
-            self.camera2.distortion,
-            self.image_size,
-            self.R,
-            self.T,
-            flags=0)
-
-        for i in range(2):
-            camera = self.camera1 if i == 0 else self.camera2
-            (self.undistort_map[i],
-                self.rectification_map[i]) = cv2.initUndistortRectifyMap(
-                    camera.intrinsic,
-                    camera.distortion,
-                    self.rect_trans[i],
-                    self.proj_mats[i],
-                    self.image_size,
-                    cv2.CV_32FC1)
-
-        print(self.rect_trans, self.proj_mats)
-
-    def rectify(self, frame1, frame2):
-
+        Remapping is done with nearest neighbor for speed.
+        """
         new_frames = []
-        for i, frame in enumerate((frame1, frame2)):
-            new_frames.append(cv2.remap(frame,
-                self.undistort_map[i],
-                self.rectification_map[i],
-                cv2.INTER_NEAREST))
-
+        for i, side in enumerate(("left", "right")):
+            new_frames.append(cv2.remap(frames[i],
+                                        self.undistortion_map[side],
+                                        self.rectification_map[side],
+                                        cv2.INTER_NEAREST))
         return new_frames
-        
-
-                
-    def exportToDict(self):
-
-        return {
-            'imagesize': self.image_size,
-            'camera1': self.camera1.exportToDict(),
-            'camera2': self.camera2.exportToDict(),
-            'R': self.R.tolist(),
-            'T': self.T.tolist(),
-            'E': self.E.tolist(),
-            'F': self.F.tolist()
-        }
-
-    def loadFromDict(self, valuedict):
-
-        self.image_size = tuple(map(int, valuedict['imagesize']))
-        self.camera1.loadFromDict(valuedict['camera1'])
-        self.camera2.loadFromDict(valuedict['camera2'])
-        self.R, self.T, self.E, self.F = \
-            map(lambda x: np.array(x, np.float64), list(valuedict.values())[3:])
 
 
 class StereoCalibrator(object):
 
-    POINTS_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+    """A class that calibrates stereo cameras by finding chessboard corners."""
 
-    def __init__(self, image_size=None):
-        
-        self.image_size  = image_size 
-        self.stereomodel = StereoCameraModel(image_size)
-        self.obj_pts     = []
-        self.img_pts     = [[], []]
-        self.images      = [[], []]
+    def _get_corners(self, image):
+        """Find subpixel chessboard corners in image."""
+        temp = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        ret, corners = cv2.findChessboardCorners(temp,
+                                                 (self.rows, self.columns))
+        if not ret:
+            raise ChessboardNotFoundError("No chessboard could be found.")
+        cv2.cornerSubPix(temp, corners, (11, 11), (-1, -1),
+                         (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS,
+                          30, 0.01))
+        return corners
 
-    def __str__(self):
-        str_ = ""
-        str_ += self.stereomodel.__str__()
+    def _show_corners(self, images, corners):
+        """Show chessboard corners found in image."""
+        temp = [None, None]
+        for i, image in enumerate(images):
+            temp[i] = image
+            cv2.drawChessboardCorners(temp[i], (self.rows, self.columns), corners[i],
+                                      True)
+        display = cv2.cvtColor(np.hstack(temp), cv2.COLOR_BGR2RGB)
+        plt.figure()
+        plt.imshow(display)
+        plt.show()
 
-        return str_
+    def __init__(self, rows, columns, square_size, image_size):
+        """
+        Store variables relevant to the camera calibration.
 
-    def findCalibrationPoints(self, img1, img2, chessboard_size=(7,9)):
+        ``corner_coordinates`` are generated by creating an array of 3D
+        coordinates that correspond to the actual positions of the chessboard
+        corners observed on a 2D plane in 3D space.
+        """
+        #: Number of calibration images
+        self.image_count = 0
+        #: Number of inside corners in the chessboard's rows
+        self.rows = rows
+        #: Number of inside corners in the chessboard's columns
+        self.columns = columns
+        #: Size of chessboard squares in cm
+        self.square_size = square_size
+        #: Size of calibration images in pixels
+        self.image_size = image_size
+        pattern_size = (self.rows, self.columns)
+        corner_coordinates = np.zeros((np.prod(pattern_size), 3), np.float32)
+        corner_coordinates[:, :2] = np.indices(pattern_size).T.reshape(-1, 2)
+        corner_coordinates *= self.square_size
+        #: Real world corner coordinates found in each image
+        self.corner_coordinates = corner_coordinates
+        #: Array of real world corner coordinates to match the corners found
+        self.object_points = []
+        #: Array of found corner coordinates from calibration images for left
+        #: and right camera, respectively
+        self.image_points = {"left": [], "right": []}
 
-        if self.image_size is None:
-            self.image_size = img1.shape[:2]
-        
-        if not (img1.shape[:2] == img2.shape[:2] == self.image_size):
-            print("Image size mismatch")
-            return
+    def add_corners(self, image_pair, corners=None, show_results=False):
+        """
+        Record chessboard corners found in an image pair.
 
-        points = np.zeros((np.prod(chessboard_size), 3), np.float32)
-        points[:, :2] = np.indices(chessboard_size).T.reshape(-1, 2)
+        The image pair should be an iterable composed of two CvMats ordered
+        (left, right).
+        """
+        side = "left"
+        detect_corners = True if corners is None else False
+        img_corners = [None, None]
 
-        ret1, pts_1 = cv2.findChessboardCorners(img1, chessboard_size, None)
-        ret2, pts_2 = cv2.findChessboardCorners(img2, chessboard_size, None)
+        self.object_points.append(self.corner_coordinates)
+        for i, image in enumerate(image_pair):
+            img_corners[i] = self._get_img_corners(image) if detect_corners \
+                else corners[i]
 
-        if ret1 and ret2:
-            pts_1 = cv2.cornerSubPix(img1, pts_1, (11, 11), (-1, -1), self.POINTS_CRITERIA)
-            pts_2 = cv2.cornerSubPix(img1, pts_2, (11, 11), (-1, -1), self.POINTS_CRITERIA)
+            self.image_points[side].append(img_corners[i].reshape(-1, 2))
+            side = "right"
+            self.image_count += 1
 
-            self.obj_pts.append(points)
-            self.img_pts[1].append(pts_1)
-            self.img_pts[2].append(pts_2)
-            self.images[1].append(img1)
-            self.imges[2].append(img2)
+        if show_results:
+            self._show_corners(image_pair, img_corners)
 
-            print("Found calibration points in image pair")
-        else:
-            print("Cannot find calibration points in image pair")
+    def calibrate_cameras(self):
+        """Calibrate cameras based on found chessboard corners."""
+        criteria = (cv2.TERM_CRITERIA_MAX_ITER + cv2.TERM_CRITERIA_EPS,
+                    100, 1e-5)
+        flags = (cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_ZERO_TANGENT_DIST +
+                 cv2.CALIB_SAME_FOCAL_LENGTH)
+        calib = StereoCalibration()
+        (calib.cam_mats["left"], calib.dist_coefs["left"],
+         calib.cam_mats["right"], calib.dist_coefs["right"],
+         calib.rot_mat, calib.trans_vec, calib.e_mat,
+         calib.f_mat) = cv2.stereoCalibrate(self.object_points,
+                                            self.image_points["left"],
+                                            self.image_points["right"],
+                                            calib.cam_mats["left"],
+                                            calib.dist_coefs["left"],
+                                            calib.cam_mats["right"],
+                                            calib.dist_coefs["right"],
+                                            self.image_size,
+                                            R=calib.rot_mat,
+                                            T=calib.trans_vec,
+                                            E=calib.e_mat,
+                                            F=calib.f_mat,
+                                            criteria=criteria,
+                                            flags=flags)[1:]
+        (calib.rect_trans["left"], calib.rect_trans["right"],
+         calib.proj_mats["left"], calib.proj_mats["right"],
+         calib.disp_to_depth_mat, calib.valid_boxes["left"],
+         calib.valid_boxes["right"]) = cv2.stereoRectify(calib.cam_mats["left"],
+                                                      calib.dist_coefs["left"],
+                                                      calib.cam_mats["right"],
+                                                      calib.dist_coefs["right"],
+                                                      self.image_size,
+                                                      calib.rot_mat,
+                                                      calib.trans_vec,
+                                                      flags=0)
+        for side in ("left", "right"):
+            (calib.undistortion_map[side],
+             calib.rectification_map[side]) = cv2.initUndistortRectifyMap(
+                                                        calib.cam_mats[side],
+                                                        calib.dist_coefs[side],
+                                                        calib.rect_trans[side],
+                                                        calib.proj_mats[side],
+                                                        self.image_size,
+                                                        cv2.CV_32FC1)
+        # This is replaced because my results were always bad. Estimates are
+        # taken from the OpenCV samples.
+        width, height = self.image_size
+        focal_length = 0.8 * width
+        calib.disp_to_depth_mat = np.float32([[1, 0, 0, -0.5 * width],
+                                              [0, -1, 0, 0.5 * height],
+                                              [0, 0, 0, -focal_length],
+                                              [0, 0, 1, 0]])
+        return calib
 
-    def addCalibrationPoints(self, img1, img2, world_pts, img_pts1, img_pts2):
+    def check_calibration(self, calibration):
+        """
+        Check calibration quality by computing average reprojection error.
 
-        self.obj_pts.append(world_pts)
-        self.img_pts[0].append(img_pts1)
-        self.img_pts[1].append(img_pts2)
-        self.images[0].append(img1)
-        self.images[1].append(img2)
-
-    def calibrate(self):
-        print('Calibrating cameras...', end=' ')
-        ret = self.stereomodel.calibrate(self.obj_pts, self.img_pts[0], self.img_pts[1])
-        if ret:
-            print('Ok.')
-        else:
-            print('FAILED!')
-
-        return ret
-
-    def drawChessBoardCorners(self,index, chessboard_size=(7,9)):
-        img1 = self.images[0][index]
-        img2 = self.images[1][index]
-        cv2.drawChessboardCorners(img1, chessboard_size, self.img_pts[0][index], True)
-        cv2.drawChessboardCorners(img2, chessboard_size, self.img_pts[1][index], True)
-        vis = cv2.resize(np.hstack((img1, img2)), None, fx=0.5, fy=0.5)
-
-        return vis
-
-    def save(self, path):
-
-        print("Saving calibration parameters...", end=' ')
-        folder, name = os.path.split(path)
-        if os.path.isdir(folder):
-            with open(path, 'w+') as fp:
-                json.dump(self.stereomodel.exportToDict(), fp)
-            print('Ok.')
-        else:
-            print("Failed! Directory does not exists")
-         
-
+        First, undistort detected points and compute epilines for each side.
+        Then compute the error between the computed epipolar lines and the
+        position of the points detected on the other side for each point and
+        return the average error.
+        """
+        sides = "left", "right"
+        which_image = {sides[0]: 1, sides[1]: 2}
+        undistorted, lines = {}, {}
+        for side in sides:
+            undistorted[side] = cv2.undistortPoints(
+                         np.concatenate(self.image_points[side]).reshape(-1,
+                                                                         1, 2),
+                         calibration.cam_mats[side],
+                         calibration.dist_coefs[side],
+                         P=calibration.cam_mats[side])
+            lines[side] = cv2.computeCorrespondEpilines(undistorted[side],
+                                              which_image[side],
+                                              calibration.f_mat)
+        total_error = 0
+        this_side, other_side = sides
+        for side in sides:
+            for i in range(len(undistorted[side])):
+                total_error += abs(undistorted[this_side][i][0][0] *
+                                   lines[other_side][i][0][0] +
+                                   undistorted[this_side][i][0][1] *
+                                   lines[other_side][i][0][1] +
+                                   lines[other_side][i][0][2])
+            other_side, this_side = sides
+        total_points = self.image_count * len(self.object_points)
+        return total_error / total_points
