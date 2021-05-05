@@ -36,11 +36,11 @@ def cvt_bbox_coords(bbox, standard):
     result = None
 
     if standard == XYXY_XYWH:
-        result = bbox[0], bbox[1], bbox[2] - bbox[1], bbox[3] - bbox[2]
+        result = bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]
     elif standard == XYWH_XYXY:
         result = bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]
     else:
-        raise ConverstionError("{} is an incorrect standard".format(standard))
+        raise ConversionError("{} is an incorrect standard".format(standard))
     
     return result
 

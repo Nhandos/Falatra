@@ -16,19 +16,41 @@ class MarkersError(Exception):
 
 class ImageNotFoundError(MarkersError):
     """ Raised when an image is not found """
+    pass
 
 
-class MarkersDetections(object):
+class InitialisationError(MarkersError):
+    """ Raised when class is not intialised """
+    pass
 
-    def __init__(self, image, bboxes, source=None):
+class TrackingFailedError(MarkersError):
+    """ Raised when tracker failed """
+
+
+def check_initialised(func):
+    def inner(self, *args, **kwargs):
+        if self.image is None or self.bboxes is None:
+            raise InitialisationError("image or bboxes is uninitialised")
+        else:
+            return func(self, *args, **kwargs)
+
+    return inner
+
+
+class MarkerDetection(object):
+
+
+    def __init__(self, image=None, bboxes=None, source=None):
         self.image = image
         self.source = source
         self.bboxes = bboxes
 
+    @check_initialised
     def clone(self):
-        return MarkersDetections(self.image, (self.msers, self.bboxes), 
+        return MarkerDetection(self.image, (self.msers, self.bboxes), 
             self.source)
 
+    @check_initialised
     def save(self, savepath):
         writer = Writer(self.source, *self.image.shape[:2])
 
@@ -39,6 +61,10 @@ class MarkersDetections(object):
         _, filename = os.path.split(self.source)
         filename = filename.split('.')[-2]
         writer.save(os.path.join(savepath, f'{filename}.xml'))
+
+    @check_initialised
+    def __iter__(self):
+        return self.bboxes.__iter__()
 
     def load(self, xmlpath):
         
@@ -63,11 +89,12 @@ class MarkersDetections(object):
             ymax = int(boxes.find('bndbox/ymax').text)
 
             bboxes.append(cvt_bbox_coords((xmin, ymin, xmax, ymax), 
-                'XYXY_XYWH'))
+                'xyxy'))
 
 
         self.bboxes = bboxes
 
+    @check_initialised
     def display(self):
         plt.figure()
         vis = draw_bboxes(self.image, self.bboxes)       
@@ -79,6 +106,7 @@ class MarkersDetections(object):
 
         plt.show()
 
+    @check_initialised
     def remove_overlap(self):
         """ Remove overlapping MSER regions """
 
@@ -103,7 +131,38 @@ class MarkersDetections(object):
                 self.bboxes.append(bboxes[i])
 
 
+class MarkersTracker(object):
+
+
+    def __init__(self, markers: MarkerDetection):
+
+        self.markers = markers
+        self.multitracker = cv2.MultiTracker_create()
+
+        for bbox in self.markers:
+            tracker = cv2.TrackerCSRT_create()
+            self.multitracker.add(tracker, self.markers.image, bbox)
+
+    def update(self, image, source=None):
+        
+        ret, bboxes = self.multitracker.update(image)
+        if not ret:
+            raise TrackingFailedError
+
+        self.markers.image = image
+        self.markers.source = source
+        self.markers.bboxes = bboxes
+
+    def display_current(self):
+        self.markers.display()
+
+    def save(self, savepath):
+        self.markers.save(savepath)
+                    
+
+
 class MarkersDetector(object):
+
 
     def __init__(self):
 
@@ -120,10 +179,11 @@ class MarkersDetector(object):
         )
 
     def detect(self, image: np.ndarray, source=None):
+
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gauss = cv2.GaussianBlur(gray,(9, 9), 0)
         blur = cv2.medianBlur(gray, 9)
         _, bboxes = self.detector.detectRegions(blur)
 
-        return MarkersDetections(image, bboxes, source)
+        return MarkerDetection(image, bboxes, source)
 
