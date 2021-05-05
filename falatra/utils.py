@@ -29,17 +29,20 @@ def in_bbox(point, bbox):
     cond2 = point[1] >= bbox[1] and point[1] <= bbox[1] + bbox[3]
     return cond1 and cond2
 
+
 def cvt_bbox_coords(bbox, standard):
     """ converts between (x,y,w,h) and (x1,y1,x2,y2) """
-    if not standard in (XYWH_XYXY, XYXY_XYWH):
-        raise ConverstionError("{} is an incorrect standard".format(standard))
+
+    result = None
 
     if standard == XYXY_XYWH:
-        return bbox[0], bbox[1], bbox[2] - bbox[1], bbox[3] - bbox[2]
+        result = bbox[0], bbox[1], bbox[2] - bbox[1], bbox[3] - bbox[2]
     elif standard == XYWH_XYXY:
-        return bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]
+        result = bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]
+    else:
+        raise ConverstionError("{} is an incorrect standard".format(standard))
     
-    return None
+    return result
 
 
 def is_bbox_overlap(bbox1, bbox2):

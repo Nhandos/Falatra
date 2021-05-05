@@ -24,7 +24,8 @@ def main(argv):
             print('Error - could not read {}'.format(path))
             continue
         
-        detection = detector.detect(img, path).remove_overlap()
+        detection = detector.detect(img, path)
+        detection.remove_overlap()
         detection.save(argv.outdir)
         print('detected: ', len(detection.bboxes), ' in ', path)
         if argv.display:
@@ -41,5 +42,4 @@ if __name__ == '__main__':
 
     argv = parser.parse_args()
     main(argv)
-
 
