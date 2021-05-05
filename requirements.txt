@@ -38,3 +38,4 @@ threadpoolctl==2.1.0
 tqdm==4.59.0
 urllib3==1.26.4
 vtk==8.1.2
+pascal-voc-writer==0.1.4

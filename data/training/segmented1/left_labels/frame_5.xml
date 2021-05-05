@@ -1,0 +1,15 @@
+<annotation>
+    <folder>left</folder>
+    <filename>frame_5.png</filename>
+    <path>/home/nhandao/Falatra/data/training/segmented1/left/frame_5.png</path>
+    <source>
+        <database>Unknown</database>
+    </source>
+    <size>
+        <width>1080</width>
+        <height>1920</height>
+        <depth>3</depth>
+    </size>
+    <segmented>0</segmented>
+
+</annotation>
