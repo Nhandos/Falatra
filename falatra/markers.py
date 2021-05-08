@@ -54,7 +54,7 @@ class MarkerDetection(object):
     def save(self, savepath):
         writer = Writer(self.source, *self.image.shape[:2])
 
-        for i, bbox in enumerate(self.bboxes):
+        for i, (key, bbox) in enumerate(self.bboxes):
             x, y, w, h = bbox
             writer.addObject(str(i), x, y, x+w, y+h)
 
@@ -83,6 +83,7 @@ class MarkerDetection(object):
         bboxes = []
         for boxes in root.iter('object'):
             
+            name = boxes.find('name').text)
             xmin = int(boxes.find('bndbox/xmin').text)
             ymin = int(boxes.find('bndbox/ymin').text)
             xmax = int(boxes.find('bndbox/xmax').text)

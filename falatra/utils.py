@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import cv2
 import numpy as np
 
@@ -62,4 +64,20 @@ def is_bbox_overlap(bbox1, bbox2):
                 rec1[0] >= rec2[2] or  # right
                 rec1[1] >= rec2[3])    # top
     
+
+def isGrayScale(image:np.ndarray):
+
+    return len(image.shape) == 2
+
+
+def maskFromBbox(roi: Tuple[int, int, int, int], imagesize: Tuple[int, int]):
+
+    x, y, w, h = roi
+    mask = np.zeros(imagesize, dtype=np.uint8)
+    mask[y:y+h,x:x+w] = 255
+
+    return mask
+
+     
+
         
