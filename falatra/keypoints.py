@@ -102,7 +102,7 @@ class Frame(object):
         self.__dict__ = d
         kps = []
         for kp in self.kps:
-            kps.append(cv2.KeyPoint(kp.pt, kp.size, kp.angle, kp.response,
+            kps.append(cv2.KeyPoint(kp.pt[0], kp.pt[1], kp.size, kp.angle, kp.response,
                 kp.octave, kp.class_id))
 
         self.kps = kps

@@ -36,6 +36,7 @@ def create_headmodel(
 
     return headmodel
 
+
 class HeadModel(object):
 
     def __init__(self, frame, kps, des, landmarks):
@@ -53,13 +54,21 @@ class HeadModel(object):
         with open(filename, "wb") as fp:
             pickle.dump(self, fp)
 
-        
-
     def display(self):
 
         vis = self.frame.getKeypointsVisual()
         plt.figure()
         plt.imshow(vis[...,[2,1,0]])
         plt.show()
+
+    def display3D(self):
+       
+        kps3d = np.array(self.keypoints)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(kps3d[:,0], kps3d[:,1], kps3d[:,2])
+        plt.show()
+
+
         
 
