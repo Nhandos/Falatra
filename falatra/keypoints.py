@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import cv2
+from matplotlib import pyplot as plt
 import numpy as np
 
 import falatra.utils
@@ -56,6 +57,60 @@ class KeypointsDetector(object):
         return kps, des
 
 
+class FeatureMatcher(object):
+    
+    def __init__(self, normtype=cv2.NORM_L2):
+        self.bfmatcher = cv2.BFMatcher(normtype, crossCheck=False)
+
+    def __call__(self, kp1, des1, kp2, des2, loweratio=0.7, homography=True):
+
+        # match kps
+        matches = self.bfmatcher.knnMatch(des1, des2, 2) # requires atleast 2 nearest matches
+
+        # loweratio filter
+        good = []
+        for i, knnmatch in enumerate(matches):
+            m, n = knnmatch[:2]
+            if m.distance < loweratio * n.distance:
+                good.append([m])
+
+
+        if homography:
+            src_pts = np.float32([ kp1[m[0].queryIdx].pt for m in good ]).reshape(-1,1,2)
+            dst_pts = np.float32([ kp2[m[0].trainIdx].pt for m in good ]).reshape(-1,1,2)
+            M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        else:
+            mask = np.ones((len(good), 1), dtype=np.uint8)
+
+        return good, mask 
+
+
+class FrameMatcher(FeatureMatcher):
+
+    def __init__(self, normtype=cv2.NORM_L2):
+        self.bfmatcher = cv2.BFMatcher(normtype, crossCheck=False)
+
+    def __call__(self, frame1, frame2, loweratio=0.95, homography=True):
+        kp1, des1 = frame1.kps, frame1.des
+        kp2, des2 = frame2.kps, frame2.des
+
+        return super().__call__(kp1, des1, kp2, des2, loweratio, homography)
+
+    @classmethod
+    def display(self, frame1, frame2, matches, mask=None):
+
+       image = cv2.drawMatchesKnn(
+               frame1.image, frame1.kps,
+               frame2.image, frame2.kps,
+               matches, None,
+               flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+               matchesMask=mask)
+
+       plt.figure()
+       plt.imshow(image[...,[2,1,0]])
+       plt.show()
+
+
 class KeyPoint(object):
     """ Keypoint class cloned from opencv keypoint
         but allows pickling
@@ -107,12 +162,15 @@ class Frame(object):
 
         self.kps = kps
 
-    def detect(self):
+    def detect(self, detectFace=True):
         
-        facedetector = FaceDetector()
-        kpdetector = KeypointsDetector()
+        if detectFace:
+            facedetector = FaceDetector()
+            self.roi = facedetector(self.image)
+        else:
+            self.roi = None
 
-        self.roi = facedetector(self.image)
+        kpdetector = KeypointsDetector()
         self.kps, self.des = kpdetector(self.image, self.roi)
 
     def getKeypointsVisual(self):

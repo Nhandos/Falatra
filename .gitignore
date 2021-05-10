@@ -1,4 +1,5 @@
 /data
+/res
 
 # Vim swap files
 *.swp

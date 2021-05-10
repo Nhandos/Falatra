@@ -54,17 +54,13 @@ class MarkerDetection(object):
     def save(self, savepath):
         writer = Writer(self.source, *self.image.shape[:2])
 
-        for i, (key, bbox) in enumerate(self.bboxes):
+        for i, (key, bbox) in enumerate(self.bboxes.items()):
             x, y, w, h = bbox
-            writer.addObject(str(i), x, y, x+w, y+h)
+            writer.addObject(key, x, y, x+w, y+h)
 
         _, filename = os.path.split(self.source)
         filename = filename.split('.')[-2]
         writer.save(os.path.join(savepath, f'{filename}.xml'))
-
-    @check_initialised
-    def __iter__(self):
-        return self.bboxes.__iter__()
 
     def load(self, xmlpath):
         
@@ -80,17 +76,16 @@ class MarkerDetection(object):
             self.image = image
             self.source = imgpath
         
-        bboxes = []
+        bboxes = {}
         for boxes in root.iter('object'):
             
-            name = boxes.find('name').text)
-            xmin = int(boxes.find('bndbox/xmin').text)
-            ymin = int(boxes.find('bndbox/ymin').text)
-            xmax = int(boxes.find('bndbox/xmax').text)
-            ymax = int(boxes.find('bndbox/ymax').text)
+            name = boxes.find('name').text
+            xmin = int(round(float(boxes.find('bndbox/xmin').text)))
+            ymin = int(round(float(boxes.find('bndbox/ymin').text)))
+            xmax = int(round(float(boxes.find('bndbox/xmax').text)))
+            ymax = int(round(float(boxes.find('bndbox/ymax').text)))
 
-            bboxes.append(cvt_bbox_coords((xmin, ymin, xmax, ymax), 
-                'xyxy'))
+            bboxes[name] = cvt_bbox_coords((xmin, ymin, xmax, ymax), 'xyxy')
 
 
         self.bboxes = bboxes
@@ -98,7 +93,7 @@ class MarkerDetection(object):
     @check_initialised
     def display(self):
         plt.figure()
-        vis = draw_bboxes(self.image, self.bboxes)       
+        vis = draw_bboxes(self.image, self.bboxes.values())       
         
         if len(vis.shape) == 2:
             plt.imshow(vis, cmap='gray')
@@ -112,11 +107,12 @@ class MarkerDetection(object):
         """ Remove overlapping MSER regions """
 
         # sort regions by area
-        bboxes = sorted(self.bboxes, key=lambda bbox: bbox[2] * bbox[3],
+        items = self.bboxes.items()
+        items = sorted(items, key=lambda item: item[1][2] * item[1][3],
                 reverse=True)
 
         keep_idx = list(range(len(bboxes)))
-        for i, bbox in enumerate(bboxes):
+        for i, (name, bbox) in enumerate(items):
             if keep_idx[i] == -1:  #index has been pruned
                 continue  
 
@@ -126,10 +122,16 @@ class MarkerDetection(object):
                 if is_bbox_overlap(bbox, bboxes[j]):
                     keep_idx[i] = -1  # mark as pruned
 
-        self.bboxes = []
+        self.bboxes = {}
         for i in keep_idx:
             if i != -1:
-                self.bboxes.append(bboxes[i])
+                self.bboxes[items[i][0]] = items[i][1]
+
+        print(self.bboxes)
+
+    def updateBBox(self, name, bbox):
+
+        self.bboxes[name] = bbox
 
 
 class MarkersTracker(object):
@@ -138,9 +140,10 @@ class MarkersTracker(object):
     def __init__(self, markers: MarkerDetection):
 
         self.markers = markers
+        self.names = list(markers.bboxes.keys())
         self.multitracker = cv2.MultiTracker_create()
 
-        for bbox in self.markers:
+        for (name, bbox) in self.markers.bboxes.items():
             tracker = cv2.TrackerCSRT_create()
             self.multitracker.add(tracker, self.markers.image, bbox)
 
@@ -152,7 +155,8 @@ class MarkersTracker(object):
 
         self.markers.image = image
         self.markers.source = source
-        self.markers.bboxes = bboxes
+        for i, bbox in enumerate(bboxes):
+            self.markers.updateBBox(self.names[i], bbox)
 
     def display_current(self):
         self.markers.display()
@@ -162,6 +166,8 @@ class MarkersTracker(object):
                     
 
 
+"""
+This produce alot of spurious results
 class MarkersDetector(object):
 
 
@@ -187,4 +193,4 @@ class MarkersDetector(object):
         _, bboxes = self.detector.detectRegions(blur)
 
         return MarkerDetection(image, bboxes, source)
-
+"""

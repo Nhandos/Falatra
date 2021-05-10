@@ -25,6 +25,22 @@ def draw_bboxes(image: np.ndarray, bboxes):
     return vis
 
 
+def find_bbox_centre(bbox):
+
+    x = bbox[0] + bbox[2] / 2
+    y = bbox[1] + bbox[3] / 2
+
+    return x,y
+
+def distance_from_line(pt, a, b, c):
+    """ Computes the distance of the pt=(x, y) from the
+        line ax + by + c = 0
+    """
+
+    x,y = pt
+    return abs(a*x + b*y + c) / (a**2 + b**2)**(0.5)
+
+
 def in_bbox(point, bbox):
     """ Checks if a point is within a bounding box """
     cond1 = point[0] >= bbox[0] and point[0] <= bbox[0] + bbox[2]

@@ -72,8 +72,7 @@
 		</bndbox>
 	</object>
 	<object>
-		<name>
-Metopion</name>
+		<name>Metopion</name>
 		<pose>Unspecified</pose>
 		<truncated>0</truncated>
 		<difficult>0</difficult>

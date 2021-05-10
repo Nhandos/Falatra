@@ -141,6 +141,61 @@ class StereoCalibration(object):
                                         cv2.INTER_NEAREST))
         return new_frames
 
+    def compute_correspond_epilines(self, pts, view='left'):
+        """
+        For all the points on an image w.r.t the given view, compute
+        the corresponding epilines on the other view
+        """
+
+        whichImage = {'left': 0, 'right': 1}
+        lines = cv2.computeCorrespondEpilines(
+                pts,
+                whichImage[view],
+                self.f_mat)
+
+        return lines
+
+    def undistort_points(self, pts, view='left'):
+        pts = np.array(pts)
+        res = cv2.undistortPoints(
+                pts.reshape(-1, 2), 
+                self.cam_mats[view],
+                self.dist_coefs[view],
+                P=self.cam_mats[view])
+
+        return res
+
+    def triangulate(self, pts1, pts2):
+        """
+        Reconstructs 3-dimensional points (in homogenous coordinates) by
+        using their observations with a stereo camera
+
+        Args:
+            pts1: 2xN array of feature points in teh first image
+            pts2: 2xN array of corresponding pooints in the second image
+
+        Returns:
+            X: 3xN array of 3D coordinates of the keypoints w.r.t world
+                coordinates
+            X1: 3xN array of 3D coordinates of the keypoints w.r.t left
+                camera's coordinates
+            X2: 3xN array of 3D coordinates of the keypoints w.r.t right
+                coordinates
+
+        """
+
+        X = cv2.triangulatePoints(
+                self.proj_mats['left'],
+                self.proj_mats['right'],
+                pts1, pts2)
+
+        X /= X[3]
+        X1 = self.proj_mats['left'][:3] @ X
+        X2 = self.proj_mats['right'][:3] @ X
+
+        return X, X1, X2
+
+
 
 class StereoCalibrator(object):
 
@@ -276,6 +331,10 @@ class StereoCalibrator(object):
                                               [0, 0, 0, -focal_length],
                                               [0, 0, 1, 0]])
         return calib
+
+
+
+        
 
     def check_calibration(self, calibration):
         """
