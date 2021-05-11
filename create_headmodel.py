@@ -4,7 +4,8 @@ import cv2
 from matplotlib import pyplot as plt
 import vtk
 
-from falatra.model.head3d import HeadModel, create_headmodel
+from falatra.modelcreator import create_headmodel
+from falatra.model.head3d import HeadModel
 from falatra.renderer import importOBJModel
 from falatra.vtkutils import takeScreenshot,create_points_glyph3DMapper
 from falatra.keypoints import Frame

@@ -2,10 +2,6 @@ import pickle
 
 from matplotlib import pyplot as plt
 import numpy as np
-import vtk
-
-from .landmarks import Landmarks3D
-from ..vtkutils import takeScreenshot, pickPoints
 from ..keypoints import Frame
 
 
@@ -18,23 +14,6 @@ def hasFrame(func):
             return func(self, *args, **kwargs)
 
     return inner
-
-
-def create_headmodel(
-        renderwindow: vtk.vtkRenderWindow,
-        renderer: vtk.vtkRenderer,
-        landmarks
-    ):
-
-    image = takeScreenshot(renderwindow)
-    frame = Frame(image)
-    frame.detect()
-    
-    pts = [kp.pt for kp in frame.kps]
-    worldPts = pickPoints(renderer, pts, frame.getSize())
-    headmodel = HeadModel(frame, worldPts, frame.des, landmarks)
-
-    return headmodel
 
 
 def deserialize_headmodel(serfile):
