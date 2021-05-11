@@ -1,7 +1,7 @@
 <annotation>
 	<folder>centre</folder>
 	<filename>frame_11.png</filename>
-	<path>/home/nhandao/Falatra/data/training/segmented1/centre/frame_11.png</path>
+	<path>./data/training/segmented1/centre/frame_11.png</path>
 	<source>
 		<database>Unknown</database>
 	</source>
