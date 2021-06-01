@@ -1,11 +1,11 @@
 import argparse
+import json
 
 import cv2
 from matplotlib import pyplot as plt
 import vtk
 
 from falatra.modelcreator import create_headmodel
-from falatra.model.head3d import HeadModel
 from falatra.renderer import importOBJModel
 from falatra.vtkutils import takeScreenshot,create_points_glyph3DMapper
 from falatra.keypoints import Frame
@@ -13,10 +13,12 @@ from falatra.keypoints import Frame
 
 class HeadModelInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
 
-    def __init__(self, output, modelren, parent=None):
+    def __init__(self, output, output2, metadata, modelren, parent=None):
         self.modelrenderer = modelren
         self.parent = parent
         self.output = output
+        self.output2 = output2
+        self.metadata = metadata
         self.AddObserver("KeyPressEvent", self.keyPressEvent)
 
         self.keyPointsActor = vtk.vtkActor()
@@ -27,7 +29,7 @@ class HeadModelInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
         if key == 'k':
             self.modelrenderer.RemoveActor(self.keyPointsActor)
 
-            headmodel = create_headmodel(self.parent.GetRenderWindow(), self.modelrenderer, None)
+            headmodel, frame = create_headmodel(self.metadata, self.parent.GetRenderWindow(), self.modelrenderer, None)
             mapper = create_points_glyph3DMapper(headmodel.keypoints)
             self.keyPointsActor.SetMapper(mapper)
             self.keyPointsActor.GetProperty().SetColor(198,214,36)
@@ -36,7 +38,8 @@ class HeadModelInteractorStyle(vtk.vtkInteractorStyleTrackballCamera):
             self.parent.Render()
 
             headmodel.display()
-            headmodel.save(self.output)
+            frame.serialize(self.output2)
+            headmodel.serialize(self.output)
 
 def main(argv):
 
@@ -44,6 +47,9 @@ def main(argv):
     # Set the background color.
     bkg = map(lambda x: x / 255.0, [26, 51, 102, 255])
     colors.SetColor("BkgColor", *bkg)
+
+    with open(argv.metadatafile, 'r') as fp:
+        metadata = json.load(fp)
 
     renderer = importOBJModel(argv.objfile, argv.texturefile)
 
@@ -55,7 +61,7 @@ def main(argv):
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(renderer)
     renderer.SetBackground(colors.GetColor3d("BkgColor"))
-    renWin.SetSize(300, 300)
+    renWin.SetSize(1920, 1080)
     renWin.SetWindowName('Generate Head model')
 
     iren = vtk.vtkRenderWindowInteractor()
@@ -63,7 +69,7 @@ def main(argv):
 
     # Create a custom interactor to handle events produced by a user
     # (keypress, mouse events, etc)
-    style = HeadModelInteractorStyle(argv.output, renderer, parent=iren)
+    style = HeadModelInteractorStyle(argv.output, argv.output2, metadata, renderer, parent=iren)
     iren.SetInteractorStyle(style)
 
     # This allows the interactor to initalize itself. It has to be
@@ -85,7 +91,9 @@ if __name__ == '__main__':
     parser.add_argument('objfile', type=str, help='obj model file')
     parser.add_argument('texturefile', type=str,
         help='model texture file')
+    parser.add_argument('metadatafile', type=str, help='face metadata')
     parser.add_argument('output', type=str, help='headmodel serialize output')
+    parser.add_argument('output2', type=str, help='serialize the 2d features that was use to create headmodel')
     main(parser.parse_args())
 
 

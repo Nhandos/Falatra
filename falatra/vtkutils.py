@@ -22,7 +22,6 @@ def create_points_glyph3DMapper(worldPts):
         return mapper
 
 
-
 def pickPoints(renderer: vtk.vtkRenderer, points, imagesize):
 
 

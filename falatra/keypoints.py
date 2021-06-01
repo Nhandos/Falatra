@@ -1,3 +1,4 @@
+import pickle
 from typing import Tuple
 
 import cv2
@@ -188,8 +189,18 @@ class Frame(object):
 
         return ret
 
+    def display(self):
+        vis = self.getKeypointsVisual()
+        plt.figure()
+        plt.imshow(vis[...,[2,1,0]])
+        plt.show()
+
     def getSize(self):
         return self.image.shape[:2]
+
+    def serialize(self, output):
+        with open(output, 'wb') as fp:
+            pickle.dump(self, fp)
 
     @property
     def image(self):
