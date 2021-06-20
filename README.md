@@ -16,8 +16,13 @@ https://mybinder.org/v2/gh/Nhandos/Falatra/5be459efb42a2d2a36f68d25977b7db82970b
 ## File Structure
 
 /data : training data, labels, 3D models
+
 /matlab: some matlab scripts
+
 /falatra: otype implementation
+
 /test: some unit tests
+
 /tools: auxillary python scripts
+
 
