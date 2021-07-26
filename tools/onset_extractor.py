@@ -111,9 +111,6 @@ def sync_videos(videofile, visualise=False, output='output.mov'):
     audio = AudioProcessing(waveform, fs, clip.fps)
     bandpass = audio.filter((3700, 4000), btype='bandpass', order=7)
 
-    # plot onsets from bandpass 
-    mono = 
-
     peaks = bandpass.detect_onsets()
     n1 = parse_input('Select start peak: ')
     n2 = parse_input('Select end peak (-1 for EOF): ')
