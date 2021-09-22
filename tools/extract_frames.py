@@ -5,7 +5,7 @@ import os
 parser = argparse.ArgumentParser(description='Extract frames from video')
 parser.add_argument('video', type=str, help='videofile')
 parser.add_argument('outdir', type=str, help='output directory')
-parser.add_argument('--prefix', type=str, help='prefix', default='frame_')
+parser.add_argument('--prefix', type=str, help='prefix the frame name', default='frame_')
 parser.add_argument('--format', type=str,help='image format', default='png')
 parser.add_argument('--verbose', '-v', action='store_true', default=False,
     help='verbose logging')

@@ -1,11 +1,7 @@
 import argparse
 
 import cv2
-import pygame
-from pygame.locals import DOUBLEBUF
-
-from display import Display2D
-from falatra.markers import MarkerDetection, MarkersTracker
+from falatra.markers import MarkerDetection, MarkersTracker, TrackingFailedError
 
 
 def main(argv):
@@ -21,9 +17,18 @@ def main(argv):
             print('Failed - could not read image {}'.format(imgpath))
             break
 
-        tracker.update(image, imgpath)
+        try:
+            tracker.update(image, imgpath)
+        except TrackingFailedError:
+            print('Failed for image {}'.format(imgpath))
+            continue
+            
+
         if argv.outdir is not None:
             tracker.save(argv.outdir)
+        print('Processed image {}'.format(imgpath))
+
+    print('Done')
 
 
 if __name__ == '__main__':

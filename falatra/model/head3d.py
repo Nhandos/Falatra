@@ -1,5 +1,6 @@
 import pickle 
 from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 
@@ -47,18 +48,18 @@ class HeadModel3D(object):
         """
        
         kps3d = self.keypoints
-
         fig = plt.figure() 
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(kps3d[:,0], kps3d[:,1], kps3d[:,2])
+        ax = Axes3D(fig)
+        ax.scatter(kps3d[:,0], kps3d[:,1], kps3d[:,2],
+                marker='o', color='red', s=5, label='Keypoints')
 
         if len(self._landmarks) > 0:
             landmarks3d = np.array(list(self._landmarks.values()))
-            ax.scatter(landmarks3d[:,0], landmarks3d[:,1], landmarks3d[:,2])
+            ax.scatter(landmarks3d[:,0], landmarks3d[:,1], landmarks3d[:,2],
+                    marker='o', color='blue', s=30, label='Landmarks')
             for name, pt3d in self._landmarks.items():
-                if selectedlandmarks is None or name in selectedlandmarks: 
-                    ax.text(*pt3d, name, color='blue', fontsize='xx-small')
-
+                pt3d = np.array(pt3d).flatten()
+                ax.text(*pt3d, name, color='blue', fontsize='xx-small')
         plt.show()
 
     @property
