@@ -61,7 +61,7 @@ def main(argv):
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(renderer)
     renderer.SetBackground(colors.GetColor3d("BkgColor"))
-    renWin.SetSize(1920, 1080)
+    renWin.SetSize(1440, 900)
     renWin.SetWindowName('Generate Head model')
 
     iren = vtk.vtkRenderWindowInteractor()
@@ -69,7 +69,7 @@ def main(argv):
 
     # Create a custom interactor to handle events produced by a user
     # (keypress, mouse events, etc)
-    style = HeadModelInteractorStyle(argv.output, argv.output2, metadata, renderer, parent=iren)
+    style = HeadModelInteractorStyle(argv.headmodel_out, argv.frame_out, metadata, renderer, parent=iren)
     iren.SetInteractorStyle(style)
 
     # This allows the interactor to initalize itself. It has to be
@@ -92,8 +92,8 @@ if __name__ == '__main__':
     parser.add_argument('texturefile', type=str,
         help='model texture file')
     parser.add_argument('metadatafile', type=str, help='face metadata')
-    parser.add_argument('output', type=str, help='headmodel serialize output')
-    parser.add_argument('output2', type=str, help='serialize the 2d features that was use to create headmodel')
+    parser.add_argument('headmodel_out', type=str, help='headmodel serialize output')
+    parser.add_argument('frame_out', type=str, help='serialize the 2d features that was use to create headmodel')
     main(parser.parse_args())
 
 
